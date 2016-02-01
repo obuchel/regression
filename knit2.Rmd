@@ -1,0 +1,164 @@
+---
+title: "Practical Machine Learning: Project"
+output: html_document
+---
+Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+
+Dataset
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+Data Preprocessing
+
+Loading the R packages:
+
+```{r}
+# packages
+library(caret)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(repmis)
+```
+
+You can also embed plots, for example:
+
+```{r, echo=FALSE}
+# Downloading data
+
+url_training <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+url_testing <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# Importing data treating empty values as NA.
+df_training <- read.csv(url_training, na.strings=c("NA",""), header=TRUE)
+df_testing <- read.csv(url_testing, na.strings=c("NA",""), header=TRUE)
+
+# Verifying whether column names are identical in the training and test datasets.
+all.equal(colnames(df_training)[1:length(colnames(df_training))-1], colnames(df_testing)[1:length(colnames(df_testing))-1])
+
+## [1] TRUE
+
+##The df_training dataset has 19622 observations and 60 variables, and the df_testing dataset contains 20 observations and the same variables as the training set. We are trying to predict variable classe in the training set.
+
+# Removing columns of the training set that contain any missing values.
+df_training <- df_training[, colSums(is.na(df_training)) == 0]
+df_testing <- df_testing[, colSums(is.na(df_testing)) == 0]
+
+# Dropping the first 7 columns as they have little predictive power.
+cleanTrainData <- df_training[, -c(1:7)]
+cleanTestData <- df_testing[, -c(1:7)]
+
+#Checking for covariates that have virtually no variablility.
+nearZeroVar(cleanTrainData, saveMetrics=TRUE)
+```
+
+The cleaned data sets clearnTrainData and cleanTestData both have 53 columns with the same first 52 variables and the last variable classe and problem_id individually. cleanTrainData has 19622 rows while cleanTestData has 20 rows.
+
+Data spliting
+
+I split the cleaned training set trainData into a training set (train, 70%) for prediction and a test set (test 30%).
+
+```{r}
+set.seed(7826) 
+inTrain <- createDataPartition(cleanTrainData$classe, p = 0.7, list = FALSE)
+train <- cleanTrainData[inTrain, ]
+test <- cleanTrainData[-inTrain, ]
+
+```
+
+Prediction Algorithms
+
+First, the “out of the box” classification tree and random forests to predict outcomes for classe.
+
+```{r}
+ctrl <- trainControl(method = "cv", number = 5)
+modfit <- train(classe ~ ., data = train, method = "rpart", 
+                   trControl = ctrl)
+print(modfit, digits = 4)
+
+```
+
+
+Accuracy was used to select the optimal model using  the largest value.
+The final value used for the model was cp = 0.03723.
+
+
+```{r}
+fancyRpartPlot(modfit$finalModel)
+
+```
+
+```{r}
+# Predicting outcomes using test dataset
+predict <- predict(modfit, test)
+# Prediction results
+(confidence <- confusionMatrix(test$classe, predict))
+
+```
+
+
+```{r}
+##Verifying accuracy of prediction...
+(accuracy <- confidence$overall[1])
+
+```
+
+The accuracy rate of classification tree is 0.5 does not warrant good prediction. For thsi reason, we use random forests.
+
+Random forests
+
+```{r}
+
+random_forests <- train(classe ~ ., data = train, method = "rf", trControl = ctrl)
+print(random_forests, digits = 4)
+
+```
+
+
+Accuracy was used to select the optimal model using  the largest value.
+The final value used for the model was mtry = 27. 
+
+
+```{r}
+# Confusion matrix
+predictRF <- predict(random_forests, test)
+(confRF <- confusionMatrix(test$classe, predictRF))
+
+```
+
+Verifying accuracy
+
+```{r}
+# Verifying accuracy
+(accuracyRF <- confRF$overall[1])
+```
+
+
+Random forest method has a much higher accuracy rate is 0.991 than classifications trees, and so the out-of-sample error rate is 0.009. But the algorithm itself is difficult to interpret and is computationally inefficient. It took around 15 minutes to compute the results.
+
+Prediction on Testing Set with Random Forests
+
+```{r}
+# Run against 20 testing set provided by Professor Leek.
+(predict(random_forests, cleanTestData))
+
+```
+
+Appendix
+
+Correlation Matrix
+
+```{r}
+library(corrplot)
+ M <- cor(cleanTestData)
+ corrplot(M, method = "circle", order = "FPC")
+
+```
