@@ -1,0 +1,166 @@
+---
+title: "Regression Models: Project"
+output: html_document
+---
+
+Assignment
+
+You work for Motor Trend, a magazine about the automobile industry. Looking at a data set of a collection of cars, they are interested in exploring the relationship between a set of variables and miles per gallon (MPG) (outcome). They are particularly interested in the following two questions:
+
+“Is an automatic or manual transmission better for MPG”
+"Quantify the MPG difference between automatic and manual transmissions"
+
+Summary 
+
+I first summarized the relationships between variables, and then fit a linear regression model that has the smallest BIC and the largest adjusted R^2, followed by residual analysis and diagnostics. Either with or without interaction, our model tells us a manual transmission is better for MPG, and no-pattern residual plots are indications for good model fitting.
+
+Exploratory Data Analysis
+
+The mtcars dataset is a dataframe with 32 observations on 11 variables. Figure 1 in Appendix gives us an overview of the variables including their histogram, scatter plots and correlation between variables. Our predictor variable of interest, am, is a dichotomous variable: 0 stands for automatic, 1 for manual. According to Figure 1, manual transmission seems to have higher MPG than automatic transmission.
+
+The distribution of MPG is approximately normal and there are no apparent outliers. Figure 2 in the Appendix shows how MPG varies by automatic versus manual transmission. Figure 2 shows a difference in the MPG by transmission type -- manual transmission seems to get better miles per gallon than automatic transmission. 
+
+Regression Models and Subset Selection
+
+First, let's consider two simple models: 1) the model including all predictors and 2) the one with only one variable -- am.
+
+```{r}
+##model with all variables
+fit.full <- lm(mpg ~ ., data = mtcars); round(summary(fit.full)$coef[, 4][-1], 2) 
+```
+
+In the full model, all coefficients are not significant at 5% significance level, although is has large adjusted R^2=0.78. This model results in multicollinearity and overfitting with inflated estimated standard error.
+
+```{r}
+##model with one variable
+fit.am <- lm(mpg ~ am, data = mtcars); summary(fit.am)$coef[2, ]
+
+```
+
+The coefficients of the am-only model are significantly different from zero, saying that on average, a manual transmitted car has 7.245 MPG higher than an automatic transmitted car. However, the model has small adjusted R^2= 0.34, implying small explanatory power for MPG.
+
+To do variable selection, we use forward and backward stepwise selection with AIC (Akaike's ‘An Information Criterion’) and BIC (Bayesian Information Criterion) criteria. Forward stepwise selection starts with an intercept-only model, and then adds predictors to the model gradually until all of the predictors are in the model. At each step the variable that gives the greatest additional improvement to the fit is added to the model. Backward method, on the other hand, begins with the full model, and then removes the least useful predictor, one at the time.
+
+Four models forward_aic, forward_bic, backward_aic and backward_bic are specified below:
+
+```{r}
+
+forward_aic <- step(lm(mpg ~ 1, data = mtcars), direction = "forward", 
+                scope = formula(fit.full), k = 2, trace = 0) 
+forward_bic <- step(lm(mpg ~ 1, data=mtcars), direction = "forward", 
+                scope = formula(fit.full), k = log(32), trace = 0) 
+backward_aic <- step(fit.full, direction = "backward", k = 2, trace = 0) 
+backward_bic <- step(fit.full, direction = "backward", k = log(32), trace = 0) 
+```
+
+```{r}
+forward_aic 
+```
+
+```{r}
+forward_bic 
+```
+
+```{r}
+backward_aic 
+```
+
+```{r}
+backward_bic 
+```
+
+The model back.bic has the largest adjusted R^2= 0.834. It includes wt, qsec, and am has the most explanatory power for MPG. Under this model, a manual transmission car, on average, has 2.936 miles per gallon more than an automatic transmission car.
+
+We then fit four possible interaction models fit.int, fit.int.aq, fit.int.aw and fit.int.wq to check if any interaction is needed to be in the model.
+
+```{r}
+fit.int <- summary(lm(mpg ~ wt * qsec * am, data = mtcars))
+fit.int.aq <- summary(lm(mpg ~ wt + qsec * am, data = mtcars))
+fit.int.aw <- summary(lm(mpg ~ qsec + wt * am, data = mtcars))
+fit.int.wq <- summary(lm(mpg ~ am + qsec * wt, data = mtcars))
+```
+
+```{r}
+fit.int 
+```
+
+```{r}
+fit.int.aq
+```
+
+```{r}
+fit.int.aw  
+```
+
+```{r}
+fit.int.wq 
+```
+
+Since model fit.int.aw has the largest adjusted R^2=
+ 0.88, the model mpg = 9.723 + (1.017)qsec + (-2.937)wt + (14.079)am + (-4.141)wt*am is our final model. When am = 0, the slope of wt is -2.937 and the intercept is 9.723. When am = 1, the slope of wt is -7.078 and the intercept is 23.802. In term of uncertainty, the 95% confidence interval for the coefficients are shown below.
+
+```{r}
+ fit <- lm(mpg ~ qsec + wt * am, data = mtcars)
+t(confint(fit))
+
+```
+ 
+ 
+```{r}
+
+summary(fit)
+```
+  
+This model explains over 88.04% of the variance, which is better than previous models.
+
+Residual Diagnostics
+
+Some plots for residual diagnostics are shown in Figure 3 in Appendix. There is no particular pattern in residuals vs fitted, scale-location, and residuals vs leverage plots. For QQ-plot, it seems that the residual is a little bit right skewed, but it still can be seen as normal from Shapiro-Wilk normality test.
+
+```{r}
+shapiro.test(fit$res)
+```
+
+```{r}
+round(hatvalues(fit)[hatvalues(fit) > 2*5/32], 2) # high leverage
+```
+
+
+
+```{r}
+round(dfbeta(fit)[which(hatvalues(fit) > 2*5/32), ], 2) # check influence 
+```
+
+Our model fit the data quite well. Although there are some high leverage points, we may still use this model for prediction as long as we pay attention to those data points with careful explanation.
+
+
+
+Appendix
+
+```{r message = FALSE, warning = FALSE}
+
+library("PerformanceAnalytics")
+chart.Correlation(mtcars, histogram=TRUE, pch=11)
+
+```
+
+Figure 1: Decriptive Summary
+
+
+```{r}
+
+boxplot(mpg~am, data = mtcars,
+        col = c("dark grey", "light grey"),
+        xlab = "Transmission",
+        ylab = "Miles per Gallon",
+        main = "MPG by Transmission Type")
+```
+
+Figure 2: MPG by Transmission Type
+
+```{r}
+require(graphics)
+par(mfrow = c(2, 2), oma = c(0, 0, 2, 0))
+plot(fit)
+```
+Figure 3: Residual diagnostics
